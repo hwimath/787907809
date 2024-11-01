@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>휘매쓰 연산 챌린지!</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f8ff;
+            text-align: center;
+        }
+        #gameContainer {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        #title {
+            font-size: 48px;
+            margin-top: 50px;
+            color: #2e8b57;
+        }
+        #difficultySelection, #questionContainer, #gameOverContainer {
+            margin-top: 30px;
+        }
+        .energyBar {
+            width: 100%;
+            background-color: #ddd;
+            height: 30px;
+            position: relative;
+            margin-top: 20px;
+        }
+        .energy {
+            background-color: #76c7c0;
+            height: 100%;
+            width: 100%;
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        .optionButton {
+            display: block;
+            margin: 15px auto;
+            padding: 15px 30px;
+            font-size: 18px;
+            background-color: #ffffff;
+            border: 2px solid #2e8b57;
+            cursor: pointer;
+            width: 60%;
+            border-radius: 5px;
+        }
+        .optionButton:hover {
+            background-color: #e0ffe0;
+        }
+        #score, #lives, #totalTime {
+            font-size: 24px;
+            margin-top: 20px;
+        }
+        #popup {
+            display: none;
+            position: fixed;
+            background-color: rgba(0,0,0,0.5);
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            justify-content: center;
+            align-items: center;
+        }
+        #popupContent {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        #popupContent button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="title">휘매쓰 연산 챌린지!</div>
+        <div id="difficultySelection">
+            <h2>난이도를 선택하세요</h2>
+            <button class="optionButton" onclick="startGame('최상')">최상</button>
+            <button class="optionButton" onclick="startGame('상')">상</button>
+            <button class="optionButton" onclick="startGame('중')">중</button>
+            <button class="optionButton" onclick="startGame('하')">하</button>
+        </div>
+        <div id="questionContainer" style="display:none;">
+            <div id="energyBar" class="energyBar">
+                <div id="energy" class="energy"></div>
+            </div>
+            <div id="question" style="font-size:24px; margin-top:20px;"></div>
+            <div id="options"></div>
+            <div id="feedback" style="font-size:20px; margin-top:20px; color:red;"></div>
+            <div id="score">점수: 0</div>
+            <div id="lives">남은 기회: 3</div>
+            <div id="totalTime">총 게임 시간: 0초</div>
+        </div>
+        <div id="gameOverContainer" style="display:none;">
+            <h2 id="gameOverMessage"></h2>
+            <button class="optionButton" onclick="restartGame()">다시 시작</button>
+        </div>
+    </div>
+    <div id="popup">
+        <div id="popupContent">
+            <h2 id="popupMessage"></h2>
+            <button onclick="closePopup()">닫기</button>
+        </div>
+    </div>
+    <script>
+        let questions = [
+            // 앞서 만든 50개의 소수 곱하기 소수 문제들을 여기에 추가합니다.
+            {
+                type: '소수곱셈',
+                question: '0.3 × 0.5를 계산하세요.',
+                answer: '0.15',
+                options: ['0.15', '1.5', '0.03', '0.05']
+            },
+            {
+                type: '소수곱셈',
+                question: '0.01 × 2.7을 계산하세요.',
+                answer: '0.027',
+                options: ['0.027', '0.27', '0.0027', '0.072']
+            },
+            // 나머지 48개의 문제들도 동일한 형식으로 추가합니다.
+            // 모든 문제를 이 배열에 포함시켜야 합니다.
+            // 예를 들면:
+            {
+                type: '소수곱셈',
+                question: '0.4 × 0.2를 계산하세요.',
+                answer: '0.08',
+                options: ['0.08', '0.8', '0.008', '0.02']
+            },
+            // ...
+            // 50번째 문제까지 모두 추가
+        ];
+
+        let currentQuestion = {};
+        let score = 0;
+        let lives = 3;
+        let difficulty = '';
+        let timeLimit = 0;
+        let energyInterval;
+        let totalTime = 0;
+        let totalTimeInterval;
+        let energyPercentage = 100;
+        let decreaseRate = 1; // 매 라운드마다 증가
+        let answeredQuestions = [];
+
+        function startGame(selectedDifficulty) {
+            difficulty = selectedDifficulty;
+            switch(difficulty) {
+                case '최상':
+                    timeLimit = 20000; // 20초
+                    scoreIncrement = 20;
+                    break;
+                case '상':
+                    timeLimit = 30000; // 30초
+                    scoreIncrement = 15;
+                    break;
+                case '중':
+                    timeLimit = 40000; // 40초
+                    scoreIncrement = 13;
+                    break;
+                case '하':
+                    timeLimit = Infinity; // 시간 제한 없음
+                    scoreIncrement = 10;
+                    break;
+            }
+            document.getElementById('difficultySelection').style.display = 'none';
+            document.getElementById('questionContainer').style.display = 'block';
+            totalTimeInterval = setInterval(() => {
+                totalTime++;
+                document.getElementById('totalTime').innerText = '총 게임 시간: ' + totalTime + '초';
+            }, 1000);
+            nextQuestion();
+        }
+
+        function nextQuestion() {
+            if (lives <= 0) {
+                gameOver();
+                return;
+            }
+
+            // 시간 제한 설정
+            energyPercentage = 100;
+            if (difficulty !== '하') {
+                clearInterval(energyInterval);
+                energyInterval = setInterval(() => {
+                    energyPercentage -= (100 / (timeLimit / decreaseRate / 100));
+                    if (energyPercentage <= 0) {
+                        energyPercentage = 0;
+                        clearInterval(energyInterval);
+                        lives--;
+                        document.getElementById('lives').innerText = '남은 기회: ' + lives;
+                        document.getElementById('feedback').innerText = '시간 초과! 다음 문제로 넘어갑니다.';
+                        setTimeout(() => {
+                            document.getElementById('feedback').innerText = '';
+                            nextQuestion();
+                        }, 2000);
+                        return;
+                    }
+                    document.getElementById('energy').style.width = energyPercentage + '%';
+                }, 100);
+            } else {
+                document.getElementById('energyBar').style.display = 'none';
+            }
+
+            // 문제 선택
+            if (answeredQuestions.length === questions.length) {
+                answeredQuestions = []; // 문제를 모두 풀면 다시 초기화하여 반복되게 합니다.
+            }
+            do {
+                currentQuestion = questions[Math.floor(Math.random() * questions.length)];
+            } while (answeredQuestions.includes(currentQuestion));
+
+            answeredQuestions.push(currentQuestion);
+
+            // 문제 표시
+            document.getElementById('question').innerText = currentQuestion.question;
+            // 선택지 섞기
+            let options = [...currentQuestion.options];
+            options = [...new Set(options)]; // 중복 제거
+            options.sort(() => Math.random() - 0.5);
+
+            // 선택지 표시
+            let optionsHtml = '';
+            options.forEach((option, index) => {
+                optionsHtml += `<button class="optionButton" onclick="checkAnswer('${option}')">${option}</button>`;
+            });
+            document.getElementById('options').innerHTML = optionsHtml;
+        }
+
+        function checkAnswer(selectedOption) {
+            clearInterval(energyInterval);
+            if (selectedOption === currentQuestion.answer) {
+                score += scoreIncrement;
+                document.getElementById('score').innerText = '점수: ' + score;
+                document.getElementById('feedback').innerText = '정답입니다!';
+                randomPopup();
+            } else {
+                lives--;
+                document.getElementById('lives').innerText = '남은 기회: ' + lives;
+                document.getElementById('feedback').innerText = `오답입니다. 정답은 "${currentQuestion.answer}" 입니다.`;
+            }
+            setTimeout(() => {
+                document.getElementById('feedback').innerText = '';
+                nextQuestion();
+            }, 2000);
+        }
+
+        function gameOver() {
+            clearInterval(totalTimeInterval);
+            document.getElementById('questionContainer').style.display = 'none';
+            document.getElementById('gameOverContainer').style.display = 'block';
+            document.getElementById('gameOverMessage').innerText = '게임 종료! 최종 점수: ' + score + '점';
+        }
+
+        function restartGame() {
+            score = 0;
+            lives = 3;
+            totalTime = 0;
+            answeredQuestions = [];
+            document.getElementById('score').innerText = '점수: ' + score;
+            document.getElementById('lives').innerText = '남은 기회: ' + lives;
+            document.getElementById('totalTime').innerText = '총 게임 시간: ' + totalTime + '초';
+            document.getElementById('gameOverContainer').style.display = 'none';
+            document.getElementById('difficultySelection').style.display = 'block';
+        }
+
+        function closePopup() {
+            document.getElementById('popup').style.display = 'none';
+        }
+
+        function randomPopup() {
+            let randomNumber = Math.random();
+            if (randomNumber < 0.0001) { // 1/10000 확률
+                showPopup('축하합니다! 5000원 상품권에 당첨되셨습니다!');
+            } else if (randomNumber < 0.001) { // 1/1000 확률
+                showPopup('축하합니다! 3000원 상품권에 당첨되셨습니다!');
+            } else if (randomNumber < 0.002) { // 1/500 확률
+                showPopup('축하합니다! 1회 면제권을 획득하셨습니다!');
+                lives++;
+                document.getElementById('lives').innerText = '남은 기회: ' + lives;
+            }
+        }
+
+        function showPopup(message) {
+            document.getElementById('popupMessage').innerText = message;
+            document.getElementById('popup').style.display = 'flex';
+        }
+    </script>
+</body>
+</html>
